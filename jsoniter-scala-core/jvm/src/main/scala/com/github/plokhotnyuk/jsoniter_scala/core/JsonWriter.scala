@@ -254,6 +254,34 @@ final class JsonWriter private[jsoniter_scala](
     writeUUID(x.getMostSignificantBits, x.getLeastSignificantBits)
   }
 
+  def writeValNoQuote(x: String): Unit = count = {
+    val indention = this.indention
+    var pos = ensureBufCapacity(indention + 4)
+    if (comma) {
+      buf(pos) = ','
+      pos += 1
+      if (indention != 0) {
+        buf(pos) = '\n'
+        pos = writeNBytes(indention, ' ', pos + 1, buf)
+      }
+    } else comma = true
+    writeString(x, 0, x.length, pos, limit - 1, escapedChars)
+  }
+
+  def writeValNonEscapedNoQuote(x: String): Unit = count = {
+    val indention = this.indention
+    var pos = ensureBufCapacity(indention + 4)
+    if (comma) {
+      buf(pos) = ','
+      pos += 1
+      if (indention != 0) {
+        buf(pos) = '\n'
+        pos = writeNBytes(indention, ' ', pos + 1, buf)
+      }
+    } else comma = true
+    writeString(x, 0, x.length, pos, limit - 1, whiteEscapedChars)
+  }
+
   def writeVal(x: String): Unit = count = {
     val indention = this.indention
     var pos = ensureBufCapacity(indention + 4)
@@ -2107,6 +2135,13 @@ object JsonWriter {
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1
   )
+
+  private final val whiteEscapedChars: Array[Byte] = {
+    val es = new Array[Byte](128)
+    java.util.Arrays.fill(es, 0, 32, 0: Byte)
+    es(127) = 0
+    es
+  }
 
   private final val offsets = Array(
     5088146770730811392L, 5088146770730811392L, 5088146770730811392L, 5088146770730811392L,

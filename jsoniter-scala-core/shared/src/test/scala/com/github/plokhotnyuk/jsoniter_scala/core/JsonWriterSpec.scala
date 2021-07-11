@@ -4,7 +4,6 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.time._
 import java.time.format.DateTimeFormatter
 import java.util.{Base64, UUID}
-
 import com.github.plokhotnyuk.jsoniter_scala.core.GenUtils._
 import org.scalacheck.Arbitrary.arbitrary
 import org.scalacheck.Gen
@@ -12,6 +11,7 @@ import org.scalatest.wordspec.AnyWordSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 
+import java.io.IOException
 import scala.util.Random
 
 class JsonWriterSpec extends AnyWordSpec with Matchers with ScalaCheckPropertyChecks {
@@ -321,6 +321,91 @@ class JsonWriterSpec extends AnyWordSpec with Matchers with ScalaCheckPropertyCh
       forAll(genZoneId, minSuccessful(10000))(check)
     }
   }
+
+  "JsonWriter.writeValNoQuotes and JsonWriter.writeKey for string" should {
+    "don't write null value" in {
+      intercept[NullPointerException](withWriter(_.writeVal(null.asInstanceOf[String])))
+      intercept[NullPointerException](withWriter(_.writeKey(null.asInstanceOf[String])))
+    }
+    "write string of Unicode chars which are non-surrogate and should not be escaped" in {
+      def check(s: String): Unit = {
+        withWriter(_.writeValNoQuote(s)) shouldBe s
+        withWriter(_.writeKey(s)) shouldBe '"' + s + "\":"
+      }
+
+      forAll(minSuccessful(100000)) { (s: String) =>
+        whenever(s.forall(ch => !Character.isSurrogate(ch) && !isEscapedAscii(ch))) {
+          check(s)
+        }
+      }
+    }
+    "write strings with chars that should be escaped" in {
+      def check(s: String, escapeUnicode: Boolean): Unit = {
+        withWriter(WriterConfig.withEscapeUnicode(escapeUnicode))(_.writeValNoQuote(s)) shouldBe
+          s.flatMap(toEscaped(_))
+        withWriter(WriterConfig.withEscapeUnicode(escapeUnicode))(_.writeKey(s)) shouldBe
+          "\"" + s.flatMap(toEscaped(_)) + "\":"
+      }
+
+      forAll(Gen.listOf(genEscapedAsciiChar).map(_.mkString), Gen.oneOf(true, false), minSuccessful(10000)) {
+        (s: String, escapeUnicode: Boolean) =>
+          check(s, escapeUnicode)
+      }
+    }
+
+    "write strings with escaped Unicode chars if it is specified by provided writer config" in {
+      def check(s: String): Unit = {
+        withWriter(WriterConfig.withEscapeUnicode(true))(_.writeValNoQuote(s)) shouldBe s.flatMap(toEscaped(_))
+        withWriter(WriterConfig.withEscapeUnicode(true))(_.writeKey(s)) shouldBe "\"" + s.flatMap(toEscaped(_)) + "\":"
+      }
+
+      forAll(minSuccessful(100000)) { (s: String) =>
+        whenever(s.forall(ch => isEscapedAscii(ch) || ch >= 128)) {
+          check(s)
+        }
+      }
+    }
+
+    "write strings with valid character surrogate pair" in {
+      def check(s: String): Unit = {
+        withWriter(_.writeValNoQuote(s)) shouldBe s
+        withWriter(_.writeKey(s)) shouldBe "\"" + s + "\":"
+        withWriter(WriterConfig.withEscapeUnicode(true))(_.writeValNoQuote(s)) shouldBe s.flatMap(toEscaped(_))
+        withWriter(WriterConfig.withEscapeUnicode(true))(_.writeKey(s)) shouldBe "\"" + s.flatMap(toEscaped(_)) + "\":"
+      }
+
+      forAll(genHighSurrogateChar, genLowSurrogateChar, minSuccessful(10000)) { (ch1: Char, ch2: Char) =>
+        check(ch1.toString + ch2.toString)
+      }
+    }
+    "write string with mixed Latin-1 characters when escaping of Unicode chars is turned on" in {
+      withWriter(WriterConfig.withEscapeUnicode(true))(_.writeValNoQuote("a\bc")) shouldBe "a\\bc"
+      withWriter(WriterConfig.withEscapeUnicode(true))(_.writeKey("a\bc")) shouldBe "\"a\\bc\":"
+    }
+    "write string with mixed UTF-8 characters when escaping of Unicode chars is turned off" in {
+      withWriter(_.writeValNoQuote("ї\bc\u0000")) shouldBe "ї\\bc\\u0000"
+      withWriter(_.writeKey("ї\bc\u0000")) shouldBe "\"ї\\bc\\u0000\":"
+    }
+    "throw i/o exception in case of illegal character surrogate pair" in {
+      def checkError(s: String, escapeUnicode: Boolean): Unit = {
+        assert(intercept[JsonWriterException](withWriter(WriterConfig.withEscapeUnicode(escapeUnicode))(_.writeValNoQuote(s)))
+          .getMessage.contains("illegal char sequence of surrogate pair"))
+        assert(intercept[JsonWriterException](withWriter(WriterConfig.withEscapeUnicode(escapeUnicode))(_.writeKey(s)))
+          .getMessage.contains("illegal char sequence of surrogate pair"))
+      }
+
+      forAll(genSurrogateChar, Gen.oneOf(true, false), minSuccessful(10000)) { (ch: Char, escapeUnicode: Boolean) =>
+        checkError(ch.toString, escapeUnicode)
+        checkError(ch.toString + ch.toString, escapeUnicode)
+      }
+      forAll(genLowSurrogateChar, genHighSurrogateChar, Gen.oneOf(true, false), minSuccessful(10000)) {
+        (ch1: Char, ch2: Char, escapeUnicode: Boolean) =>
+          checkError(ch1.toString + ch2.toString, escapeUnicode)
+      }
+    }
+  }
+
+
   "JsonWriter.writeVal and JsonWriter.writeKey for string" should {
     "don't write null value" in {
       intercept[NullPointerException](withWriter(_.writeVal(null.asInstanceOf[String])))
