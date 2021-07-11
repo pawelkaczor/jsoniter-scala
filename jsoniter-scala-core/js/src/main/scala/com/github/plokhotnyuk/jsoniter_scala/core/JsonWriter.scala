@@ -280,6 +280,12 @@ final class JsonWriter private[jsoniter_scala](
     writeUUID(x.getMostSignificantBits, x.getLeastSignificantBits)
   }
 
+  def writeValNoQuote(x: String): Unit =
+    throw new UnsupportedOperationException()
+
+  def writeValNonEscapedNoQuote(x: String): Unit =
+    throw new UnsupportedOperationException()
+
   def writeVal(x: String): Unit = count = {
     if (x eq null) throw new NullPointerException
     val indention = this.indention
