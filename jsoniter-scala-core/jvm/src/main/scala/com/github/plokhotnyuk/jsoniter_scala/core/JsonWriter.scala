@@ -254,21 +254,14 @@ final class JsonWriter private[jsoniter_scala](
     writeUUID(x.getMostSignificantBits, x.getLeastSignificantBits)
   }
 
-  def writeValNoQuote(x: String): Unit = count = {
-    val indention = this.indention
-    var pos = ensureBufCapacity(indention + 4)
-    if (comma) {
-      buf(pos) = ','
-      pos += 1
-      if (indention != 0) {
-        buf(pos) = '\n'
-        pos = writeNBytes(indention, ' ', pos + 1, buf)
-      }
-    } else comma = true
-    writeString(x, 0, x.length, pos, limit - 1, escapedChars)
-  }
+  def writeValNoQuote(x: String): Unit =
+    writeValNoQuote(x, whiteEscaped = false)
 
-  def writeValNonEscapedNoQuote(x: String): Unit = count = {
+
+  def writeValNonEscapedNoQuote(x: String): Unit =
+    writeValNoQuote(x, whiteEscaped = true)
+
+  private[this] def writeValNoQuote(x: String, whiteEscaped: Boolean): Unit = count = {
     val indention = this.indention
     var pos = ensureBufCapacity(indention + 4)
     if (comma) {
@@ -279,7 +272,7 @@ final class JsonWriter private[jsoniter_scala](
         pos = writeNBytes(indention, ' ', pos + 1, buf)
       }
     } else comma = true
-    writeString(x, 0, x.length, pos, limit - 1, whiteEscapedChars)
+    writeString(x, 0, x.length, pos, limit - 1, if (whiteEscaped) whiteEscapedChars else escapedChars)
   }
 
   def writeVal(x: String): Unit = count = {
